@@ -28,7 +28,10 @@ model User {
   watchlist        WatchList[]
   sentFriendReqs   Friend[]       @relation("Sender")
   receivedFriendReqs Friend[]     @relation("FriendReceiver")
-
+  comments         comment[]
+  communities      communityMembers[]
+  communityChat    communityChat[]
+  notifications    Notification[]
 }
 
 model DirectMessage {
@@ -71,4 +74,54 @@ model Friend {
   @@unique([senderId, receiverId])
 }
 
+model comment {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  AnimeId   Int
+  content   String
+  createdAt DateTime @default(now())
+}
 
+model community {
+  id        Int      @id @default(autoincrement())
+  Name      String
+  Description   String
+  CoverImage    String?
+  createdAt DateTime @default(now())
+  members   communityMembers[]
+  chat      communityChat[]
+}
+
+model communityMembers {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  community community @relation(fields: [communityId], references: [id])
+  communityId Int
+  createdAt DateTime @default(now())
+  Role      Role   @default(MEMBER) 
+}
+
+model communityChat {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  community community @relation(fields: [communityId], references: [id])
+  communityId Int
+  content   String
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  content   String
+  createdAt DateTime @default(now())
+}
+
+enum Role {
+  MEMBER
+  ADMIN
+}

@@ -32,7 +32,14 @@ export const addFriend = async (req: Request<{}, {}, FriendRequest>, res: Respon
                 status: 'PENDING'  // Added to match schema default
             }
         });
-
+        
+        await prisma.notification.create({
+            data:{
+                userId: receiverId,
+                content: `${req.user.name} sent you a friend request`,
+            }
+        });
+        
         res.status(201).json({
             message: 'Friendship request sent',
             friendship: newFriendship
@@ -87,6 +94,76 @@ export const getFriends = async (req: Request, res: Response): Promise<void> => 
 
         res.status(200).json(formattedFriends);
         
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ message: 'Server error', error });
+    }
+};
+
+export const getFriendRequests = async (req: Request, res: Response): Promise<void> => {
+    const userId = req.user.id;
+    try {
+        const friendRequests = await prisma.friend.findMany({
+            where: {
+                receiverId: userId,
+                status: 'PENDING'
+            },
+            include: {
+                sender: {
+                    select: {
+                        id: true,
+                        name: true,
+                        profile: true,
+                    }
+                }
+            }
+        });
+
+        res.status(200).json(friendRequests);
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ message: 'Server error', error });
+    }
+};
+
+export const handleFriendRequest = async (req: Request, res: Response): Promise<void> => {
+    const userId = req.user.id;
+    const friendId = Number(req.body.friendId);
+    const status = req.body.status;
+
+    try {
+        const checkFriendship = await prisma.friend.findFirst({
+            where: {
+                senderId: friendId,
+                receiverId: userId
+            }
+        });
+
+        if (!checkFriendship) {
+            res.status(400).json({ message: 'Friendship request not found' });
+            return;
+        }
+
+        const updatedFriendship = await prisma.friend.update({
+            where: {
+                id: checkFriendship.id
+            },
+            data: {
+                status: status
+            }
+        });
+        
+        await prisma.notification.create({
+            data:{
+                userId: friendId,
+                content: `${req.user.name} ${status === 'ACCEPTED' ? 'accepted' : 'declined'} your friend request`,
+            }
+        });
+
+        res.status(200).json({
+            message: 'Friendship request accepted',
+            friendship: updatedFriendship
+        });
     } catch (error) {
         console.log(error);
         res.status(500).json({ message: 'Server error', error });

@@ -5,10 +5,10 @@ const prisma = new PrismaClient();
 
 export const sendMessage = async (req: Request, res: Response): Promise<void> => {
     const senderId = req.user.id;
-    const { receiverId, message } = req.body;
+    const { receiverId, content } = req.body;
     const receiver = Number(receiverId);
 
-    console.log(senderId, receiver, message);
+    console.log(senderId, receiver, content);
 
     try {
         const checkReceiver = await prisma.user.findUnique({
@@ -24,11 +24,10 @@ export const sendMessage = async (req: Request, res: Response): Promise<void> =>
             data: {
                 senderId,
                 receiverId: receiver,
-                content: message,
+                content,
             }
         });
 
-        // Socket.IO will handle real-time delivery
         res.status(201).json(newMessage);
     } catch (error) {
         res.status(500).json({ message: 'Server error', error });

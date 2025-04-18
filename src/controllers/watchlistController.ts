@@ -1,12 +1,14 @@
 import { Request, Response } from "express";
 import { PrismaClient } from "@prisma/client";
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import axios from "axios";
 
 const prisma = new PrismaClient();
 
-
-
+// Initialize Google Generative AI with API key
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
+const GOOGLE_CSE_ID = process.env.GOOGLE_CSE_ID; // Your Custom Search Engine ID
+const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY; // Your Google API Key                  
 
 interface WatchlistRequest {
     AnimeId: number;
@@ -15,6 +17,8 @@ interface WatchlistRequest {
     Image_url: string;
     synopsis: string;
 }
+
+
 
 export const addWatchlist = async (req: Request, res: Response): Promise<void> => {
     const watchlist: WatchlistRequest = req.body;
@@ -54,19 +58,27 @@ export const checkWatchlist = async (req: Request, res: Response): Promise<void>
     const userId = req.user.id;
     const AnimeId = req.body.AnimeId;
     const id = Number(AnimeId);
-    const watchlist = await prisma.watchList.findFirst({
-        where: {
-            userId: userId,
-            AnimeId: id
+    try {
+        const watchlist = await prisma.watchList.findFirst({
+            where: {
+                userId: userId,
+                AnimeId: id
+            }
+        });
+        if(!AnimeId){
+            res.status(400).json({ message: 'AnimeId is required' });
+            return;
         }
-    });
-
-    if (watchlist) {
-        res.status(200).json("True");
-    } else {
-        res.status(404).json({ message: 'Anime not found in watchlist' });
+    
+        if (watchlist) {
+            res.status(200).json("True");
+        } else {
+            res.status(404).json({ message: 'Anime not found in watchlist' });
+        }
+    } catch (error) {
+        res.status(500).json({ message: 'Server error', error });
     }
-}
+};
 
 export const getWatchlist = async (req: Request, res: Response): Promise<void> => {
     const userId = req.user.id;
@@ -96,6 +108,8 @@ export const deleteFromWatchlist = async (req: Request, res: Response): Promise<
     const userId = req.user.id;
     const AnimeId = req.body.AnimeId;
     const id = Number(AnimeId);
+    console.log(req.body);
+
     const checkWatchlist = await prisma.watchList.findFirst({
         where: {
             userId: userId,
@@ -113,58 +127,121 @@ export const deleteFromWatchlist = async (req: Request, res: Response): Promise<
         });
         res.status(200).json({ message: 'Anime removed from watchlist' });
     }
+};
 
+const fetchImages = async (anime: string) => {
+    try {
+        const response = await axios.get('https://www.googleapis.com/customsearch/v1', {
+            params: {
+                q: `${anime} official anime poster`,
+                searchType: "image",
+                cx: GOOGLE_CSE_ID,
+                key: GOOGLE_API_KEY,
+                num: 1
+            }
+        });
+        const imageUrl = response.data.items?.[0]?.link || "/images/default-anime-placeholder.png";
+        return imageUrl;
+    } catch (error) {
+        console.error('Error fetching images:', error);
+    }
 };
 
 export const getRecommendation = async (req: Request, res: Response): Promise<void> => {
     try {
-        const userId = Number(req.user.id);
-        console.log(userId);
-
-        const watchlist = await prisma.watchList.findMany({
-            where: {
-                userId: {
-                    equals: userId
-                }
-            },
-            select: {
-                English_Title: true,
-                Japanese_Title: true, 
-                synopsis: true
+        console.log('Generating anime recommendations...');
+        let prompt = `You are an anime recommendation system, recommend 9 anime.
+        Return ONLY a valid JSON array of objects with these exact properties: 
+        [
+            {
+                "title": "English title",
+                "japanese_title": "Japanese title",
+                "synopsis": "Brief synopsis"
             }
+        ]`;
+
+        const userId = Number(req.user.id);
+        const watchlist = await prisma.watchList.findMany({
+            where: { userId: userId },
+            select: { English_Title: true }
         });
 
-        if (watchlist.length === 0) {
-            res.status(404).json({ message: 'No anime in watchlist' });
-            return;
+        const animeList = watchlist.map(anime => anime.English_Title).join(', ');
+
+        if (watchlist.length > 0) {
+            prompt = `You are an anime recommendation system. Based on these anime: ${animeList}, recommend 9 similar anime.
+            Return ONLY a valid JSON array of objects with these exact properties: 
+            [
+                {
+                    "title": "English title",
+                    "japanese_title": "Japanese title",
+                    "synopsis": "Brief synopsis"
+                }
+            ]`;
         }
 
-        const animeList = watchlist.map((anime) => anime.English_Title).join(', ');
-        const prompt = `You are an anime recommendation system. Based on these anime: ${animeList}, recommend 5 similar anime. 
-                       Return ONLY a valid JSON array of objects with these exact properties: 
-                       {
-                           "title": "English title",
-                           "japanese_title": "Japanese title",
-                           "synopsis": "Brief synopsis",
-                           "image_url": "myanimelist image URL"
-                       }
-                       Do not include any markdown formatting, code blocks, or additional text.`;
-
-        // Get the generative model
-        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+        // Initialize the model
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
         // Generate content
-        const result = await model.generateContent(prompt);
-        const response = result.response;
-        const text = response.text();
+        const result = await model.generateContent({
+            contents: [{ role: "user", parts: [{ text: prompt }] }]
+        });
 
-        // Clean the response text before parsing
-        const cleanedText = text.replace(/^```json\s*|\s*```$/g, '').trim();
+        // Extract the response correctly
+        if (!result.response?.candidates?.[0]?.content?.parts?.[0]?.text) {
+            throw new Error('Failed to generate content');
+        }
+        const text = result.response.candidates[0].content.parts[0].text;
+        console.log("Raw AI response:", text);
 
-        // Parse the JSON response
-        const recommendations = JSON.parse(cleanedText);
-        console.log(recommendations);   
-        res.status(200).json(recommendations);
+        // More thorough cleanup of the JSON text
+        let cleanedText = text
+            .replace(/^```json\s*|\s*```$/g, '') // Remove markdown code block syntax
+            .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // Remove control characters
+            .trim(); // Remove leading/trailing whitespace
+
+        let recommendations;
+        try {
+            // Parse JSON response with error handling
+            recommendations = JSON.parse(cleanedText);
+        } catch (parseError) {
+            console.error('JSON parsing error:', parseError);
+            
+            // Try an alternative approach - sometimes there are hidden characters
+            try {
+                // Try to extract just the array part using regex
+                const jsonMatch = cleanedText.match(/\[\s*\{.*\}\s*\]/s);
+                if (jsonMatch) {
+                    recommendations = JSON.parse(jsonMatch[0]);
+                    console.log('Successfully parsed using regex extraction');
+                } else {
+                    throw new Error('Could not extract JSON array');
+                }
+            } catch (secondError) {
+                console.error('Second parsing attempt failed:', secondError);
+                console.log('Failed JSON string:', cleanedText);
+                throw new Error('Failed to parse recommendation data after multiple attempts');
+            }
+        }
+
+        // Fetch images for each recommendation
+        for (let i = 0; i < recommendations.length; i++) {
+            const anime = recommendations[i];
+            const imageUrl = await fetchImages(anime.title);
+            recommendations[i].image_url = imageUrl;
+        }
+
+        // Structure the final response
+        const MergedData = recommendations.map((anime: any) => ({
+            English_Title: anime.title,
+            Japanese_Title: anime.japanese_title,
+            Image_url: anime.image_url,
+            synopsis: anime.synopsis
+        }));
+
+        console.log(MergedData);
+        res.status(200).json(MergedData);
 
     } catch (error) {
         console.error('Recommendation error:', error);
