@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { PrismaClient } from "@prisma/client";
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import axios from "axios";
+import { console } from "inspector";
 
 const prisma = new PrismaClient();
 
@@ -47,35 +48,39 @@ export const addWatchlist = async (req: Request, res: Response): Promise<void> =
             }
         });
 
-        res.status(201).json(newWatchlist);
-    } catch (error) {
-        console.log(error);
+        res.status(201).json({
+            message: 'Anime added to watchlist',
+        });
+    } catch (error: any) {
         res.status(500).json({ message: 'Server error', error });
     }
 };
 
 export const checkWatchlist = async (req: Request, res: Response): Promise<void> => {
     const userId = req.user.id;
-    const AnimeId = req.body.AnimeId;
-    const id = Number(AnimeId);
+    const AnimeId = Number(req.body.AnimeId);
     try {
         const watchlist = await prisma.watchList.findFirst({
             where: {
                 userId: userId,
-                AnimeId: id
+                AnimeId
             }
         });
-        if(!AnimeId){
+        if (!AnimeId) {
             res.status(400).json({ message: 'AnimeId is required' });
             return;
         }
-    
+
         if (watchlist) {
-            res.status(200).json("True");
+            res.status(200).json({
+                response: true,
+            });
         } else {
-            res.status(404).json({ message: 'Anime not found in watchlist' });
+            res.status(200).json({
+                response: false,
+            });
         }
-    } catch (error) {
+    } catch (error: any) {
         res.status(500).json({ message: 'Server error', error });
     }
 };
@@ -83,49 +88,54 @@ export const checkWatchlist = async (req: Request, res: Response): Promise<void>
 export const getWatchlist = async (req: Request, res: Response): Promise<void> => {
     const userId = req.user.id;
     const userID = req.params.id;
-    console.log(userId);
+    try {
+        if (userID) {
+            const watchlist = await prisma.watchList.findMany({
+                where: {
+                    userId: Number(userID)
+                }
+            });
+            res.status(200).json(watchlist);
+            return;
+        }
 
-    if (userID) {
         const watchlist = await prisma.watchList.findMany({
             where: {
-                userId: Number(userID)
+                userId: userId
             }
         });
+
         res.status(200).json(watchlist);
-        return;
+    } catch (error: any) {
+        res.status(500).json({ message: 'Server error', error });
     }
-
-    const watchlist = await prisma.watchList.findMany({
-        where: {
-            userId: userId
-        }
-    });
-
-    res.status(200).json(watchlist);
 };
 
 export const deleteFromWatchlist = async (req: Request, res: Response): Promise<void> => {
     const userId = req.user.id;
-    const AnimeId = req.body.AnimeId;
-    const id = Number(AnimeId);
-    console.log(req.body);
+    const AnimeId = Number(req.body.AnimeId);
+    try {
 
-    const checkWatchlist = await prisma.watchList.findFirst({
-        where: {
-            userId: userId,
-            AnimeId: id
-        }
-    });
-    if (!checkWatchlist) {
-        res.status(404).json({ message: 'Anime not found in watchlist' });
-        return;
-    } else {
-        await prisma.watchList.delete({
+
+        const checkWatchlist = await prisma.watchList.findFirst({
             where: {
-                id: checkWatchlist.id
+                userId: userId,
+                AnimeId
             }
         });
-        res.status(200).json({ message: 'Anime removed from watchlist' });
+        if (!checkWatchlist) {
+            res.status(404).json({ message: 'Anime not found in watchlist' });
+            return;
+        } else {
+            await prisma.watchList.delete({
+                where: {
+                    id: checkWatchlist.id
+                }
+            });
+            res.status(200).json({ message: 'Anime removed from watchlist' });
+        }
+    } catch (error: any) {
+        res.status(500).json({ message: 'Server error', error });
     }
 };
 
@@ -142,14 +152,13 @@ const fetchImages = async (anime: string) => {
         });
         const imageUrl = response.data.items?.[0]?.link || "/images/default-anime-placeholder.png";
         return imageUrl;
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error fetching images:', error);
     }
 };
 
 export const getRecommendation = async (req: Request, res: Response): Promise<void> => {
     try {
-        console.log('Generating anime recommendations...');
         let prompt = `You are an anime recommendation system, recommend 9 anime.
         Return ONLY a valid JSON array of objects with these exact properties: 
         [
@@ -166,7 +175,7 @@ export const getRecommendation = async (req: Request, res: Response): Promise<vo
             select: { English_Title: true }
         });
 
-        const animeList = watchlist.map(anime => anime.English_Title).join(', ');
+        const animeList = watchlist.map((anime: any) => anime.English_Title).join(', ');
 
         if (watchlist.length > 0) {
             prompt = `You are an anime recommendation system. Based on these anime: ${animeList}, recommend 9 similar anime.
@@ -193,7 +202,6 @@ export const getRecommendation = async (req: Request, res: Response): Promise<vo
             throw new Error('Failed to generate content');
         }
         const text = result.response.candidates[0].content.parts[0].text;
-        console.log("Raw AI response:", text);
 
         // More thorough cleanup of the JSON text
         let cleanedText = text
@@ -207,20 +215,17 @@ export const getRecommendation = async (req: Request, res: Response): Promise<vo
             recommendations = JSON.parse(cleanedText);
         } catch (parseError) {
             console.error('JSON parsing error:', parseError);
-            
+
             // Try an alternative approach - sometimes there are hidden characters
             try {
                 // Try to extract just the array part using regex
                 const jsonMatch = cleanedText.match(/\[\s*\{.*\}\s*\]/s);
                 if (jsonMatch) {
                     recommendations = JSON.parse(jsonMatch[0]);
-                    console.log('Successfully parsed using regex extraction');
                 } else {
                     throw new Error('Could not extract JSON array');
                 }
             } catch (secondError) {
-                console.error('Second parsing attempt failed:', secondError);
-                console.log('Failed JSON string:', cleanedText);
                 throw new Error('Failed to parse recommendation data after multiple attempts');
             }
         }
@@ -239,14 +244,12 @@ export const getRecommendation = async (req: Request, res: Response): Promise<vo
             Image_url: anime.image_url,
             synopsis: anime.synopsis
         }));
-
-        console.log(MergedData);
         res.status(200).json(MergedData);
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('Recommendation error:', error);
-        res.status(500).json({ 
-            message: 'Error generating recommendations', 
+        res.status(500).json({
+            message: 'Error generating recommendations',
             error: error instanceof Error ? error.message : 'Unknown error'
         });
     }

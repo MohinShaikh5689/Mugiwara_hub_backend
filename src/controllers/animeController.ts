@@ -6,26 +6,25 @@ const prisma = new PrismaClient();
 interface Comment {
     comment: string;
     userId: number;
-    animeId: number;
+    AnimeId: string;
 }
 
 
 export const createComment = async (req: Request, res: Response): Promise<void> => {
     const userId = req.user.id;
-    const { comment, animeId } = req.body as Comment;
-    console.log(req.body);
+    const { comment, AnimeId } = req.body as Comment;
     try {
         const Comment = await prisma.comment.create({
             data: {
                 content:comment,
                 userId,
-                AnimeId:animeId
+                AnimeId
             }
         });
         res.status(201).json({ message: 'Comment created', Comment });
         
-    } catch (error) {
-        console.log(error);
+    } catch (error:any) {
+
         res.status(500).json({ message: 'Server error', error });
         
     }
@@ -33,7 +32,7 @@ export const createComment = async (req: Request, res: Response): Promise<void> 
 
 
 export const getComments = async (req: Request, res: Response): Promise<void> => {
-    const animeId = Number(req.params.animeId);
+    const animeId = req.params.animeId;
     try {
         const comments = await prisma.comment.findMany({
             where: {
@@ -52,8 +51,7 @@ export const getComments = async (req: Request, res: Response): Promise<void> =>
             }
         });
         res.status(200).json({ comments });
-    } catch (error) {
-        console.log(error);
+    } catch (error:any) {
         res.status(500).json({ message: 'Server error', error });
     }
 };
@@ -82,10 +80,30 @@ export const deleteComment = async (req: Request, res: Response): Promise<void> 
             }
         });
         res.status(200).json({message:'Comment deleted'});
-    } catch (error) {
-        console.log(error);
+    } catch (error:any) {
         res.status(500).json({ message: 'Server error', error });
         
     }
 
 };
+
+export const getAllComments = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const comments = await prisma.comment.findMany({
+            include: {
+                user: {
+                    select: {
+                        name: true,
+                        profile: true
+                    }
+                }
+            },
+            orderBy: {
+                createdAt: 'desc'
+            }
+        });
+        res.status(200).json({ comments });
+    } catch (error:any) {
+        res.status(500).json({ message: 'Server error', error });
+    }
+}

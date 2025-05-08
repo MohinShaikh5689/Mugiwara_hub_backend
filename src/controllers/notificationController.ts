@@ -15,7 +15,7 @@ export const getNotifications = async (req: Request, res: Response): Promise<voi
             }
         });
         res.status(200).json(notifications);
-    } catch (error) {
+    } catch (error:any) {
         console.log(error);
         res.status(500).json({ message: 'Server error', error });
     }

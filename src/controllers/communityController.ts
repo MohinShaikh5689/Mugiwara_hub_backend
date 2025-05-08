@@ -1,4 +1,4 @@
-import e, { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -17,6 +17,16 @@ const checkAdmin = async (communityId: number, userId: number) => {
         }
     });
     return admin !== null;
+}
+
+const checkMember = async (communityId: number, userId: number) => {
+    const member = await prisma.communityMembers.findFirst({
+        where: {
+            communityId,
+            userId
+        }
+    });
+    return member !== null;
 }
 
 export const createCommunity = async (req: Request, res: Response): Promise<void> => {
@@ -54,7 +64,7 @@ export const createCommunity = async (req: Request, res: Response): Promise<void
             })
         }
         res.status(201).json(community);
-    } catch (error) {
+    } catch (error:any) {
         res.status(500).json({ message: "Error creating community" });
     }
 
@@ -91,7 +101,7 @@ export const joinCommunity = async (req: Request, res: Response): Promise<void> 
         });
 
         res.status(201).json("Joined community successfully");
-    } catch (error) {
+    } catch (error:any) {
         res.status(500).json({ message: "Error joining community" });
         console.error("Error joining community:", error);
     }
@@ -118,7 +128,7 @@ export const getCommunitues = async (req: Request, res: Response): Promise<void>
         });
 
         // 3. Format the response properly
-        const formattedCommunities = userCommunities.map(membership => {
+        const formattedCommunities = userCommunities.map((membership:any) => {
             const community = membership.community;
             const count = membersCount.find(m => m.communityId === community.id);
 
@@ -129,7 +139,7 @@ export const getCommunitues = async (req: Request, res: Response): Promise<void>
         });
 
         res.status(200).json(formattedCommunities);
-    } catch (error) {
+    } catch (error:any) {
         console.error("Error fetching communities:", error);
         res.status(500).json({ message: "Error fetching communities" });
     }
@@ -138,6 +148,12 @@ export const getCommunitues = async (req: Request, res: Response): Promise<void>
 export const communityChat = async (req: Request, res: Response): Promise<void> => {
     const { communityId, message } = req.body;
     const userId = req.user.id;
+
+    const checkMemberShip = await checkMember(parseInt(communityId), userId);
+    if (!checkMemberShip) {
+        res.status(403).json({ message: "You are not a member of this community" });
+        return;
+    }
 
     try {
         const community = await prisma.community.findUnique({
@@ -160,7 +176,6 @@ export const communityChat = async (req: Request, res: Response): Promise<void> 
 
         res.status(201).json("Message sent");
     } catch (error) {
-        console.error("Error sending message:", error);
         res.status(500).json({ message: "Error sending message" });
 
     }
@@ -170,6 +185,12 @@ export const communityChat = async (req: Request, res: Response): Promise<void> 
 export const getCommunityChat = async (req: Request, res: Response): Promise<void> => {
     const { communityId } = req.params;
     const ID = parseInt(communityId);
+
+    const checkMemberShip = await checkMember(ID, req.user.id);
+    if (!checkMemberShip) {
+        res.status(403).json({ message: "You are not a member of this community" });
+        return;
+    }
 
     try {
         const chat = await prisma.communityChat.findMany({
@@ -181,8 +202,7 @@ export const getCommunityChat = async (req: Request, res: Response): Promise<voi
             }
         });
         res.status(200).json(chat);
-    } catch (error) {
-        console.error("Error fetching community chat:", error);
+    } catch (error:any) {
         res.status(500).json({ message: "Error fetching community chat" });
     }
 };
@@ -199,7 +219,6 @@ export const getCommunityById = async (req: Request, res: Response): Promise<voi
         });
         res.status(200).json(community);
     } catch (error) {
-        console.error("Error fetching community:", error);
         res.status(500).json({ message: "Error fetching community" });
     }
 };
@@ -217,7 +236,7 @@ export const getCommunityMembers = async (req: Request, res: Response): Promise<
                 user: true
             }
         });
-        const formattedMembers = members.map(member => {
+        const formattedMembers = members.map((member:any) => {
             return {
                 id: member.user.id,
                 username: member.user.name,
@@ -228,7 +247,6 @@ export const getCommunityMembers = async (req: Request, res: Response): Promise<
         );
         res.status(200).json(formattedMembers);
     } catch (error) {
-        console.error("Error fetching community members:", error);
         res.status(500).json({ message: "Error fetching community members" });
     }
 };
@@ -275,7 +293,6 @@ export const leaveCommunity = async (req: Request, res: Response): Promise<void>
             message: "Left community successfully"
         });
     } catch (error) {
-        console.error("Error leaving community:", error);
         res.status(500).json({ message: "Error leaving community" });
     }
 };
@@ -312,7 +329,7 @@ export const KickMember = async (req: Request, res: Response): Promise<void> => 
         res.status(200).json("Member kicked successfully");
 
 
-    } catch (error) {
+    } catch (error:any) {
         console.error("Error kicking member:", error);
         res.status(500).json({ message: "Error kicking member" });
     }
@@ -353,7 +370,7 @@ export const MakeAdmin = async (req: Request, res: Response): Promise<void> => {
         });
         res.status(200).json("Member made admin successfully");
 
-    } catch (error) {
+    } catch (error:any) {
         console.error("Error making admin:", error);
         res.status(500).json({ message: "Error making admin" });
     }
@@ -394,7 +411,7 @@ export const RemoveAdmin = async (req: Request, res: Response): Promise<void> =>
         });
         res.status(200).json("Member removed as admin successfully");
 
-    } catch (error) {
+    } catch (error:any) {
         console.error("Error removing admin:", error);
         res.status(500).json({ message: "Error removing admin" });
     }
@@ -431,7 +448,7 @@ export const editCommunity = async (req: Request, res: Response): Promise<void> 
             message: "Community updated successfully"
         });
 
-    } catch (error) {
+    } catch (error:any) {
         console.error("Error editing community:", error);
         res.status(500).json({ message: "Error editing community" });
     }

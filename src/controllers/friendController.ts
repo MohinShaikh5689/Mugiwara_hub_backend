@@ -45,7 +45,7 @@ export const addFriend = async (req: Request<{}, {}, FriendRequest>, res: Respon
             friendship: newFriendship
         });
         console.log('Friendship request sent');
-    } catch (error) {
+    } catch (error:any) {
         console.log(error);
         res.status(500).json({ message: 'Server error', error });
     }
@@ -84,7 +84,7 @@ export const getFriends = async (req: Request, res: Response): Promise<void> => 
             }
         });
 
-        const formattedFriends = friend.map(fri=>{
+        const formattedFriends = friend.map((fri:any)=>{
             if(fri.senderId === userId){
                 return {...fri.receiver,friendshipCreatedAt: fri.createdAt};
             }else{
@@ -94,7 +94,7 @@ export const getFriends = async (req: Request, res: Response): Promise<void> => 
 
         res.status(200).json(formattedFriends);
         
-    } catch (error) {
+    } catch (error:any) {
         console.log(error);
         res.status(500).json({ message: 'Server error', error });
     }
@@ -120,7 +120,7 @@ export const getFriendRequests = async (req: Request, res: Response): Promise<vo
         });
 
         res.status(200).json(friendRequests);
-    } catch (error) {
+    } catch (error:any) {
         console.log(error);
         res.status(500).json({ message: 'Server error', error });
     }
@@ -144,6 +144,25 @@ export const handleFriendRequest = async (req: Request, res: Response): Promise<
             return;
         }
 
+        if (status === 'REJECTED') {
+            await prisma.friend.delete({
+                where: {
+                    id: checkFriendship.id
+                }
+            });
+
+            await prisma.notification.create({
+                data:{
+                    userId: friendId,
+                    content: `${req.user.name} rejected your friend request`,
+                }
+            });
+
+            res.status(200).json({ message: 'Friendship request rejected' });
+            return;
+
+        }
+
         const updatedFriendship = await prisma.friend.update({
             where: {
                 id: checkFriendship.id
@@ -164,7 +183,7 @@ export const handleFriendRequest = async (req: Request, res: Response): Promise<
             message: 'Friendship request accepted',
             friendship: updatedFriendship
         });
-    } catch (error) {
+    } catch (error:any) {
         console.log(error);
         res.status(500).json({ message: 'Server error', error });
     }

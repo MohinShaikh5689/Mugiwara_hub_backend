@@ -27,7 +27,6 @@ const findUserByEmail = async (email: string) => {
 export const login = async (req: Request, res: Response): Promise<void> => {
     try {
         const { email, password }: LoginRequest = req.body;
-        console.log(email, password);
         if (!email || !password) {
             res.status(400).json({ message: "Email and password are required" });
             return;
@@ -86,6 +85,7 @@ export const signup = async (req: Request, res: Response): Promise<void> => {
                 email,
                 password: hashedPassword,
                 gender: gender || 'unspecified',
+                profile: 'https://i.pinimg.com/736x/9f/c5/cf/9fc5cf14dc2fdefaacf70d52a12415b3.jpg'
 
             }
         });
@@ -148,6 +148,7 @@ export const getMe = async(req: Request, res: Response): Promise<void> => {
                 email: true,
                 profile: true,
                 createdAt: true,
+                gender: true,
             }
         });
         res.status(200).json(user);
@@ -182,8 +183,7 @@ export const searchUsers = async(req: Request, res: Response): Promise<void> => 
         }
         res.status(200).json(filteredUsers);
 
-    }catch(error){
-        console.log(error);
+    }catch(error:any){
         res.status(500).json({ message: "Server error", error });
     }
 };
@@ -226,7 +226,7 @@ export const getUSerByID = async (req: Request, res: Response): Promise<void> =>
             user,
             isFriend
         });
-    } catch (error) {
+    } catch (error:any) {
         res.status(500).json({ message: 'Server error', error });
     }
 };
