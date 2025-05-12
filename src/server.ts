@@ -12,6 +12,8 @@ import FriendRoute from './routes/friendRoutes';
 import animeRoute from './routes/animeRoute';
 import CommunityRoute from './routes/communityRoutes';
 import notificationRoute from './routes/notificationRoute';
+import continueWatchingRoute from './routes/continueWatchingRoute';
+import { connectToDB } from './DB/connectToDB';
 import { Request, Response } from "express";
 
 dotenv.config();
@@ -55,6 +57,7 @@ app.use('/api/friend', FriendRoute);
 app.use('/api/anime', animeRoute);
 app.use('/api/community', CommunityRoute);
 app.use('/api/notification', notificationRoute);
+app.use('/api/continueWatching', continueWatchingRoute);
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
@@ -142,5 +145,6 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 
 httpServer.listen(PORT, () => {
+  connectToDB();
   console.log(`Server is running on port ${PORT}`);
 });
