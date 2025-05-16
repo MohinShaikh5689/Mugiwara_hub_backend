@@ -144,7 +144,24 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 
-httpServer.listen(PORT, () => {
-  connectToDB();
-  console.log(`Server is running on port ${PORT}`);
-});
+const startServer = async () => {
+  try {
+    const dbConnected = await connectToDB();
+    
+    if (!dbConnected) {
+      console.error("Failed to connect to database - retrying in 5 seconds");
+      // Retry logic
+      setTimeout(startServer, 5000);
+      return;
+    }
+    
+    httpServer.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error("Server startup error:", error);
+    process.exit(1);
+  }
+};
+
+startServer();
