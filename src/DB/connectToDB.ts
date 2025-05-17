@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import mongoose from 'mongoose';
 
 // Initialize Prisma Client with retries
 const prismaClientSingleton = () => {
@@ -24,13 +25,31 @@ if (process.env.NODE_ENV !== 'production') globalThis.prisma = prisma;
 
 export const connectToDB = async () => {
   try {
-    // Test the connection
+    // Test the Prisma connection
     await prisma.$connect();
-    console.log('✅ Database connected successfully');
+    console.log('✅ PostgreSQL Database connected successfully');
     
-    // Check database schema
+    // Check PostgreSQL database schema
     const tables = await prisma.$queryRaw`SELECT tablename FROM pg_tables WHERE schemaname='public';`;
-    console.log('Database tables available:', tables);
+    console.log('PostgreSQL tables available:', tables);
+    
+    // Connect to MongoDB
+    const mongoURI = process.env.MONGO_URI;
+    if (!mongoURI) {
+      console.error('❌ MongoDB connection failed: MONGO_URI environment variable not set');
+      return false;
+    }
+    
+    await mongoose.connect(mongoURI);
+    console.log('✅ MongoDB connected successfully');
+    
+    // Get MongoDB collections
+    if (!mongoose.connection.db) {
+      console.error('❌ MongoDB connection failed: Database instance is undefined');
+      return false;
+    }
+    const collections = await mongoose.connection.db.listCollections().toArray();
+    console.log('MongoDB collections available:', collections.map(col => col.name));
     
     return true;
   } catch (error) {
@@ -43,5 +62,6 @@ export const connectToDB = async () => {
 // Handle graceful shutdown
 process.on('beforeExit', async () => {
   await prisma.$disconnect();
-  console.log('Database disconnected');
+  await mongoose.disconnect();
+  console.log('Databases disconnected');
 });
